@@ -1,0 +1,131 @@
+package cmd
+
+import (
+	"fmt"
+	"path/filepath"
+	"strings"
+
+	"deeployer/internal/config"
+	"deeployer/internal/executor"
+	"deeployer/internal/rsync"
+	"deeployer/internal/ssh"
+
+	"github.com/spf13/cobra"
+)
+
+var (
+	dryRun  bool
+	verbose bool
+)
+
+var deployCmd = &cobra.Command{
+	Use:   "deploy [project] [remote]",
+	Short: "Deploy a project to a specific remote",
+	Long: `Deploy a project by executing its build commands, syncing the output directory 
+to the specified remote server via rsync, and running post-deployment commands.
+
+The remote must be in the project's allowed remotes list.`,
+	Args: cobra.RangeArgs(1, 2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		projectName := args[0]
+
+		cfg, err := config.Load()
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+
+		project, exists := cfg.Projects[projectName]
+		if !exists {
+			return fmt.Errorf("project '%s' not found in configuration", projectName)
+		}
+
+		if len(args) == 1 {
+			fmt.Printf("Available remotes for project '%s': %s\n", projectName, strings.Join(project.Remotes, ", "))
+			return fmt.Errorf("please specify a remote to deploy to")
+		}
+
+		remoteName := args[1]
+		return deployProject(cfg, projectName, project, remoteName)
+	},
+}
+
+func deployProject(cfg *config.Config, projectName string, project config.Project, remoteName string) error {
+	// Validate that the remote is allowed for this project
+	remoteAllowed := false
+	for _, allowedRemote := range project.Remotes {
+		if allowedRemote == remoteName {
+			remoteAllowed = true
+			break
+		}
+	}
+	
+	if !remoteAllowed {
+		return fmt.Errorf("remote '%s' is not allowed for project '%s'. Available remotes: %s", 
+			remoteName, projectName, strings.Join(project.Remotes, ", "))
+	}
+
+	// Check if remote exists in configuration
+	remote, exists := cfg.Remotes[remoteName]
+	if !exists {
+		return fmt.Errorf("remote '%s' not found in configuration", remoteName)
+	}
+
+	exec := executor.New(dryRun, verbose)
+	rsyncClient := rsync.New(dryRun, verbose)
+	sshClient := ssh.New(dryRun, verbose)
+
+	if verbose {
+		fmt.Printf("Deploying project: %s (path: %s) to remote: %s\n", projectName, project.Path, remoteName)
+	}
+
+	if err := rsyncClient.CheckRsyncAvailable(); err != nil {
+		return fmt.Errorf("rsync check failed: %w", err)
+	}
+
+	if verbose {
+		fmt.Println("Executing build commands...")
+	}
+	if err := exec.ExecuteCommands(project.BuildCommands, project.Path); err != nil {
+		return fmt.Errorf("build commands failed: %w", err)
+	}
+
+	outputPath := filepath.Join(project.Path, project.OutputDir)
+	if err := exec.CheckOutputDir(outputPath); err != nil {
+		return fmt.Errorf("output directory check failed: %w", err)
+	}
+
+	if verbose {
+		fmt.Printf("Syncing to remote: %s\n", remoteName)
+	}
+	if err := rsyncClient.Sync(outputPath, remote.User, remote.Host, remote.Path, remote.RsyncOptions); err != nil {
+		return fmt.Errorf("rsync to %s failed: %w", remoteName, err)
+	}
+
+	if len(remote.PostCommands) > 0 {
+		if verbose {
+			fmt.Printf("Executing post commands on remote: %s\n", remoteName)
+		}
+		if err := sshClient.ExecuteCommands(remote.Host, remote.User, remote.PostCommands); err != nil {
+			return fmt.Errorf("remote post commands failed on %s: %w", remoteName, err)
+		}
+	}
+
+	if len(project.PostCommands) > 0 {
+		if verbose {
+			fmt.Println("Executing local post commands...")
+		}
+		if err := exec.ExecuteCommands(project.PostCommands, project.Path); err != nil {
+			return fmt.Errorf("local post commands failed: %w", err)
+		}
+	}
+
+	fmt.Printf("Successfully deployed %s to %s\n", projectName, remoteName)
+	return nil
+}
+
+func init() {
+	rootCmd.AddCommand(deployCmd)
+
+	deployCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be executed without making changes")
+	deployCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
+}

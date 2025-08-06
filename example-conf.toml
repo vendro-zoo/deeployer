@@ -1,0 +1,38 @@
+# Example configuration file for deeployer
+# Place this file at $XDG_CONFIG_HOME/deeployer/conf.toml
+# (usually ~/.config/deeployer/conf.toml)
+
+[projects.webapp]
+path = "/home/user/projects/my-webapp"
+build_commands = ["npm run build", "npm run test"]
+output_dir = "./dist"
+post_commands = ["rm -rf ./temp", "npm run clean"]
+remotes = ["production", "staging"]
+
+[projects.api]
+path = "/home/user/projects/my-api"
+build_commands = ["go build -o ./bin/api"]
+output_dir = "./bin"
+post_commands = ["go clean", "rm -f ./debug.log"]
+remotes = ["production"]
+
+[projects.static-site]
+path = "/home/user/sites/blog"
+build_commands = ["hugo --minify"]
+output_dir = "./public"
+post_commands = ["rm -rf ./resources/_gen"]
+remotes = ["staging"]
+
+[remotes.production]
+host = "prod.example.com"
+path = "/var/www/app"
+user = "deploy"
+rsync_options = ["-avz", "--delete"]
+post_commands = ["sudo systemctl restart nginx", "sudo systemctl reload php-fpm"]
+
+[remotes.staging]
+host = "staging.example.com" 
+path = "/var/www/staging"
+user = "deploy"
+rsync_options = ["-avz"]
+post_commands = ["sudo systemctl restart nginx"]
