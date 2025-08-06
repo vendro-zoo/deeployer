@@ -22,8 +22,7 @@ var validateCmd = &cobra.Command{
 
 		cfg, err := config.Load()
 		if err != nil {
-			fmt.Printf("✗ Configuration validation failed: %v\n", err)
-			return err
+			return fmt.Errorf("✗ Configuration validation failed: %w", err)
 		}
 
 		fmt.Println("✓ Configuration is valid")

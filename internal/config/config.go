@@ -82,6 +82,18 @@ func (p *Project) Validate() error {
 		return fmt.Errorf("project path not specified")
 	}
 
+	// Validate project path exists and is accessible
+	absPath, err := filepath.Abs(p.Path)
+	if err != nil {
+		return fmt.Errorf("invalid project path: %w", err)
+	}
+
+	if _, err := os.Stat(absPath); os.IsNotExist(err) {
+		return fmt.Errorf("project path does not exist: %s", absPath)
+	} else if err != nil {
+		return fmt.Errorf("cannot access project path: %w", err)
+	}
+
 	if len(p.BuildCommands) == 0 {
 		return fmt.Errorf("no build commands defined")
 	}

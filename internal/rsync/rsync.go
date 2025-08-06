@@ -55,7 +55,7 @@ func (c *Client) buildRsyncArgs(localPath, remoteUser, remoteHost, remotePath st
 		args = append(args, "--verbose")
 	}
 
-	localPath = c.ensureTrailingSlash(localPath)
+	localPath = c.ensureDirectorySync(localPath)
 	args = append(args, localPath)
 
 	remote := fmt.Sprintf("%s@%s:%s", remoteUser, remoteHost, remotePath)
@@ -77,9 +77,15 @@ func (c *Client) validatePaths(localPath string) error {
 	return nil
 }
 
-func (c *Client) ensureTrailingSlash(path string) string {
+func (c *Client) ensureDirectorySync(path string) string {
+	// For rsync, we want to sync directory contents, not the directory itself
+	// Adding trailing slash ensures we sync contents of source into destination
+	// rather than creating the source directory inside destination
 	if !strings.HasSuffix(path, "/") {
-		return path + "/"
+		// Check if path is a directory
+		if info, err := os.Stat(path); err == nil && info.IsDir() {
+			return path + "/"
+		}
 	}
 	return path
 }

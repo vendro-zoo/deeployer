@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"deeployer/internal/config"
@@ -51,16 +52,10 @@ The remote must be in the project's allowed remotes list.`,
 
 func deployProject(cfg *config.Config, projectName string, project config.Project, remoteName string) error {
 	// Validate that the remote is allowed for this project
-	remoteAllowed := false
-	for _, allowedRemote := range project.Remotes {
-		if allowedRemote == remoteName {
-			remoteAllowed = true
-			break
-		}
-	}
-	
+	remoteAllowed := slices.Contains(project.Remotes, remoteName)
+
 	if !remoteAllowed {
-		return fmt.Errorf("remote '%s' is not allowed for project '%s'. Available remotes: %s", 
+		return fmt.Errorf("remote '%s' is not allowed for project '%s'. Available remotes: %s",
 			remoteName, projectName, strings.Join(project.Remotes, ", "))
 	}
 
@@ -89,7 +84,30 @@ func deployProject(cfg *config.Config, projectName string, project config.Projec
 		return fmt.Errorf("build commands failed: %w", err)
 	}
 
+	// Validate output directory doesn't contain directory traversal
+	if strings.Contains(project.OutputDir, "..") {
+		return fmt.Errorf("output directory contains directory traversal: %s", project.OutputDir)
+	}
+
 	outputPath := filepath.Join(project.Path, project.OutputDir)
+	// Clean the path to resolve any remaining . or .. elements
+	outputPath = filepath.Clean(outputPath)
+	
+	// Ensure the cleaned path is still within the project directory
+	projectAbsPath, err := filepath.Abs(project.Path)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute project path: %w", err)
+	}
+	
+	outputAbsPath, err := filepath.Abs(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute output path: %w", err)
+	}
+	
+	if !strings.HasPrefix(outputAbsPath, projectAbsPath) {
+		return fmt.Errorf("output directory is outside project directory: %s", outputAbsPath)
+	}
+
 	if err := exec.CheckOutputDir(outputPath); err != nil {
 		return fmt.Errorf("output directory check failed: %w", err)
 	}

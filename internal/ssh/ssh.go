@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -71,14 +72,9 @@ func (c *Client) connect(host, user string) (*ssh.Client, error) {
 }
 
 func (c *Client) getSSHConfig(user string) (*ssh.ClientConfig, error) {
-	config := &ssh.ClientConfig{
-		User:            user,
-		Auth:            []ssh.AuthMethod{},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-	}
-
-	if hostKeyCallback, err := c.getHostKeyCallback(); err == nil {
-		config.HostKeyCallback = hostKeyCallback
+	hostKeyCallback, err := c.getHostKeyCallback()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get host key callback: %w", err)
 	}
 
 	authMethods, err := c.getAuthMethods()
@@ -86,7 +82,13 @@ func (c *Client) getSSHConfig(user string) (*ssh.ClientConfig, error) {
 		return nil, err
 	}
 
-	config.Auth = authMethods
+	config := &ssh.ClientConfig{
+		User:            user,
+		Auth:            authMethods,
+		HostKeyCallback: hostKeyCallback,
+		Timeout:         30 * time.Second,
+	}
+
 	return config, nil
 }
 
@@ -98,7 +100,7 @@ func (c *Client) getHostKeyCallback() (ssh.HostKeyCallback, error) {
 
 	knownHostsPath := filepath.Join(homeDir, ".ssh", "known_hosts")
 	if _, err := os.Stat(knownHostsPath); os.IsNotExist(err) {
-		return ssh.InsecureIgnoreHostKey(), nil
+		return nil, fmt.Errorf("known_hosts file not found at %s", knownHostsPath)
 	}
 
 	return knownhosts.New(knownHostsPath)
@@ -125,7 +127,13 @@ func (c *Client) getAuthMethods() ([]ssh.AuthMethod, error) {
 
 func (c *Client) getSSHAgent() ssh.AuthMethod {
 	if sshAgent, err := net.Dial("unix", os.Getenv("SSH_AUTH_SOCK")); err == nil {
-		return ssh.PublicKeysCallback(agent.NewClient(sshAgent).Signers)
+		agentClient := agent.NewClient(sshAgent)
+		return ssh.PublicKeysCallback(func() ([]ssh.Signer, error) {
+			signers, err := agentClient.Signers()
+			// Close the connection when done
+			defer sshAgent.Close()
+			return signers, err
+		})
 	}
 	return nil
 }

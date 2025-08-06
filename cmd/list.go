@@ -46,6 +46,7 @@ func listProjects(cfg *config.Config) {
 	for _, name := range projectNames {
 		project := cfg.Projects[name]
 		fmt.Printf("\n%s:\n", name)
+		fmt.Printf("  Path: %s\n", project.Path)
 		fmt.Printf("  Output Directory: %s\n", project.OutputDir)
 		fmt.Printf("  Build Commands: %s\n", formatCommands(project.BuildCommands))
 		if len(project.PostCommands) > 0 {

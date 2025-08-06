@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
+
+	"github.com/google/shlex"
 )
 
 type Executor struct {
@@ -42,7 +43,11 @@ func (e *Executor) executeCommand(command, workDir string) error {
 		return nil
 	}
 
-	parts := strings.Fields(command)
+	parts, err := shlex.Split(command)
+	if err != nil {
+		return fmt.Errorf("failed to parse command: %w", err)
+	}
+
 	if len(parts) == 0 {
 		return fmt.Errorf("empty command")
 	}
