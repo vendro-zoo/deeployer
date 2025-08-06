@@ -2,6 +2,10 @@
 
 A deployment tool that executes commands locally and syncs output to remote servers via rsync over SSH.
 
+## Notice
+
+**THIS IS UNTESTED TERRITORY!**: There might be some bugs in this tool, even untested features! Use at your own risk!
+
 ## Overview
 
 Deeployer allows you to configure build commands, deployment targets, and cleanup operations through a simple TOML configuration file. It supports multiple projects and multiple deployment targets per project.
