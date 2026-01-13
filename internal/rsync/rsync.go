@@ -44,7 +44,7 @@ func (c *Client) Sync(localPath, remoteUser, remoteHost, remotePath string, opti
 
 func (c *Client) buildRsyncArgs(localPath, remoteUser, remoteHost, remotePath string, options []string) []string {
 	args := make([]string, 0, len(options)+3)
-	
+
 	args = append(args, options...)
 
 	if c.DryRun {

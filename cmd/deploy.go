@@ -11,6 +11,7 @@ import (
 	"deeployer/internal/rsync"
 	"deeployer/internal/ssh"
 
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 )
 
@@ -26,13 +27,39 @@ var deployCmd = &cobra.Command{
 to the specified remote server via rsync, and running post-deployment commands.
 
 The remote must be in the project's allowed remotes list.`,
-	Args: cobra.RangeArgs(1, 2),
+	Args: cobra.RangeArgs(0, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectName := args[0]
-
 		cfg, err := config.Load()
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
+		}
+
+		var projectName string
+		if len(args) <= 0 {
+			options := make([]huh.Option[string], 0, len(cfg.Projects))
+			for name := range cfg.Projects {
+				options = append(options, huh.NewOption(name, name))
+			}
+
+			form := huh.NewForm(
+				huh.NewGroup(
+					huh.NewSelect[string]().
+						Title("Project").
+						Options(options...).
+						Value(&projectName),
+				),
+			)
+
+			err := form.Run()
+			if err != nil {
+				return fmt.Errorf("failed to select project: %w", err)
+			}
+
+			if projectName == "" {
+				return fmt.Errorf("no project selected")
+			}
+		} else {
+			projectName = args[0]
 		}
 
 		project, exists := cfg.Projects[projectName]
@@ -40,12 +67,34 @@ The remote must be in the project's allowed remotes list.`,
 			return fmt.Errorf("project '%s' not found in configuration", projectName)
 		}
 
-		if len(args) == 1 {
-			fmt.Printf("Available remotes for project '%s': %s\n", projectName, strings.Join(project.Remotes, ", "))
-			return fmt.Errorf("please specify a remote to deploy to")
+		var remoteName string
+		if len(args) <= 1 {
+			options := make([]huh.Option[string], 0, len(project.Remotes))
+			for _, remote := range project.Remotes {
+				options = append(options, huh.NewOption(remote, remote))
+			}
+
+			form := huh.NewForm(
+				huh.NewGroup(
+					huh.NewSelect[string]().
+						Title("Project").
+						Options(options...).
+						Value(&remoteName),
+				),
+			)
+
+			err := form.Run()
+			if err != nil {
+				return fmt.Errorf("failed to select remote: %w", err)
+			}
+
+			if remoteName == "" {
+				return fmt.Errorf("no remote selected")
+			}
+		} else {
+			remoteName = args[1]
 		}
 
-		remoteName := args[1]
 		return deployProject(cfg, projectName, project, remoteName)
 	},
 }
@@ -92,18 +141,18 @@ func deployProject(cfg *config.Config, projectName string, project config.Projec
 	outputPath := filepath.Join(project.Path, project.OutputDir)
 	// Clean the path to resolve any remaining . or .. elements
 	outputPath = filepath.Clean(outputPath)
-	
+
 	// Ensure the cleaned path is still within the project directory
 	projectAbsPath, err := filepath.Abs(project.Path)
 	if err != nil {
 		return fmt.Errorf("failed to get absolute project path: %w", err)
 	}
-	
+
 	outputAbsPath, err := filepath.Abs(outputPath)
 	if err != nil {
 		return fmt.Errorf("failed to get absolute output path: %w", err)
 	}
-	
+
 	if !strings.HasPrefix(outputAbsPath, projectAbsPath) {
 		return fmt.Errorf("output directory is outside project directory: %s", outputAbsPath)
 	}
