@@ -58,7 +58,11 @@ func (c *Client) buildRsyncArgs(localPath, remoteUser, remoteHost, remotePath st
 	localPath = c.ensureDirectorySync(localPath)
 	args = append(args, localPath)
 
-	remote := fmt.Sprintf("%s@%s:%s", remoteUser, remoteHost, remotePath)
+	if remoteUser != "" {
+		remoteUser = fmt.Sprintf("%s@", remoteUser)
+	}
+
+	remote := fmt.Sprintf("%s%s:%s", remoteUser, remoteHost, remotePath)
 	args = append(args, remote)
 
 	return args

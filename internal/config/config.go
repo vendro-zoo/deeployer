@@ -24,7 +24,7 @@ type Project struct {
 type Remote struct {
 	Host         string   `toml:"host"`
 	Path         string   `toml:"path"`
-	User         string   `toml:"user"`
+	User         string   `default:"" toml:"user"`
 	RsyncOptions []string `toml:"rsync_options"`
 	PostCommands []string `toml:"post_commands"`
 }
@@ -116,10 +116,6 @@ func (r *Remote) Validate() error {
 
 	if r.Path == "" {
 		return fmt.Errorf("path not specified")
-	}
-
-	if r.User == "" {
-		return fmt.Errorf("user not specified")
 	}
 
 	if len(r.RsyncOptions) == 0 {
